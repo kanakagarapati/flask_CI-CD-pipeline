@@ -1,0 +1,62 @@
+pipeline {
+    agent any
+
+    environment {
+        EC2_HOST = 'your-ec2-ip'           // Replace with actual public IP
+        SSH_KEY_ID = 'ec2-ssh-key'         // Replace with your Jenkins SSH key ID
+        DEPLOY_DIR = '/home/ubuntu/flask_CI-CD-pipeline' // Directory on EC2
+    }
+
+    stages {
+        stage('Clone Repository') {
+            steps {
+                git branch: 'main', url: 'https://github.com/kanakagarapati/flask_CI-CD-pipeline.git'
+            }
+        }
+
+        stage('Install & Test') {
+            steps {
+                sh '''
+                    python3 -m venv venv
+                    source venv/bin/activate
+                    pip install --upgrade pip
+                    pip install -r requirements.txt
+                    pytest test_app.py
+                '''
+            }
+        }
+
+        stage('Deploy to EC2') {
+            steps {
+                sshagent (credentials: ["${SSH_KEY_ID}"]) {
+                    sh """
+                    ssh -o StrictHostKeyChecking=no ubuntu@${EC2_HOST} << EOF
+                        rm -rf ${DEPLOY_DIR}
+                        mkdir -p ${DEPLOY_DIR}
+                    EOF
+
+                    scp -o StrictHostKeyChecking=no -r * ubuntu@${EC2_HOST}:${DEPLOY_DIR}
+
+                    ssh -o StrictHostKeyChecking=no ubuntu@${EC2_HOST} << EOF
+                        cd ${DEPLOY_DIR}
+                        python3 -m venv venv
+                        source venv/bin/activate
+                        pip install -r requirements.txt
+                        pkill -f app.py || true
+                        nohup python3 app.py > app.log 2>&1 &
+                    EOF
+                    """
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo '✅ Build and Deployment Successful!'
+        }
+        failure {
+            echo '❌ Build or Deployment Failed.'
+        }
+    }
+}
