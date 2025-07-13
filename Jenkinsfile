@@ -1,11 +1,11 @@
 pipeline {
-    agent { label 'manoj_agent' }
+    agent {
+        label 'manoj_agent' // your custom build agent label
+    }
 
     environment {
-        EC2_HOST = '35.160.245.31'                             // Replace with your EC2 IP
-        SSH_KEY_ID = 'ubuntu'                                  // Jenkins credential ID
-        DEPLOY_DIR = '/home/ubuntu/flask_CI-CD-pipeline'      // EC2 deploy directory
-        EC2_USERNAME = 'ubuntu'
+        EC2_IP = '35.160.245.31'
+        PROJECT_DIR = '/home/ubuntu/flask_CI-CD-pipeline'
     }
 
     stages {
@@ -25,40 +25,39 @@ pipeline {
 
         stage('Deploy to EC2') {
             steps {
-                sshagent(credentials: [env.SSH_KEY_ID]) {
-                    sh """
-                    ssh -o StrictHostKeyChecking=no ${EC2_USERNAME}@${EC2_HOST} << 'EOF'
-                        echo "➡ Killing any running Flask apps..."
-                        pkill -f "python app.py" || true
+                sshagent(credentials: ['ubuntu']) {
+                    sh '''
+                        ssh -o StrictHostKeyChecking=no ubuntu@$EC2_IP << 'EOF'
+                            echo "➡ Killing any running Flask apps (if any)..."
+                            pkill -f "python app.py" || true
 
-                        echo "➡ Cleaning old deployment and cloning new repo..."
-                        rm -rf ${DEPLOY_DIR}
-                        git clone https://github.com/kanakagarapati/flask_CI-CD-pipeline.git ${DEPLOY_DIR}
+                            echo "➡ Cleaning previous deployment and cloning latest code..."
+                            rm -rf $PROJECT_DIR
+                            git clone https://github.com/kanakagarapati/flask_CI-CD-pipeline.git $PROJECT_DIR
 
-                        echo "➡ Installing dependencies..."
-                        cd ${DEPLOY_DIR}
-                        python3 -m venv venv
-                        ./venv/bin/pip install -r requirements.txt
+                            echo "➡ Creating virtualenv and installing requirements..."
+                            cd $PROJECT_DIR/Jenkins_Pipeline
+                            python3 -m venv venv
+                            ./venv/bin/pip install -r ../requirements.txt
 
-                        echo "➡ Running pytest on EC2..."
-                        ./venv/bin/python -m pytest Jenkins_Pipeline/tests/ || true
+                            echo "➡ Running pytest (if any tests exist)..."
+                            ./venv/bin/python -m pytest tests/ || true
 
-                        echo "➡ Starting Flask app in background..."
-                        cd Jenkins_Pipeline
-                        nohup ../venv/bin/python app.py > ../flask.log 2>&1 &
-                    EOF
-                    """
+                            echo "➡ Starting Flask app in background..."
+                            nohup ./venv/bin/python app.py > flask.log 2>&1 &
+                        EOF
+                    '''
                 }
             }
         }
     }
 
     post {
-        failure {
-            echo "❌ Pipeline failed at one or more stages."
-        }
         success {
-            echo "✅ Deployment completed successfully."
+            echo '✅ Deployment completed successfully.'
+        }
+        failure {
+            echo '❌ Pipeline failed at one or more stages.'
         }
     }
 }
