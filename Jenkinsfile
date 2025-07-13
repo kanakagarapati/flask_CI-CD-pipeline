@@ -7,7 +7,6 @@ pipeline {
         EC2_IP = '35.160.245.31'
         PROJECT_DIR = '/home/ubuntu/flask_CI-CD-pipeline'
     }
-
     stages {
         stage('Clone Repository') {
             steps {
@@ -25,7 +24,7 @@ pipeline {
 
         stage('Deploy to EC2') {
             steps {
-                sshagent(credentials: ['ubuntu']) {
+                sshagent(credentials: ['manojg']) {
                     sh '''
                         ssh -o StrictHostKeyChecking=no ubuntu@$EC2_IP << 'EOF'
                             echo "➡ Killing any running Flask apps (if any)..."
